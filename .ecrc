@@ -1,0 +1,4 @@
+{
+  "IgnoreDefaults": false,
+  "Exclude": [".idea", "git", "dist", "node_modules"]
+}
