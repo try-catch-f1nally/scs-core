@@ -11,19 +11,19 @@ const UPLOAD_STREAM_TOPIC = 'upload-stream';
 const UPLOAD_ACKNOWLEDGE_TOPIC = 'upload-acknowledge';
 const DOWNLOAD_TOPIC = 'download-stream';
 
-export type UploadOptions = {archiveName: string; encryptionKey?: string};
-export type DownloadOptions = {archiveName: string; encryptionKey: string};
 export type StorageServiceOptions = AuthTokens & {userId: string};
+type InitiateDownloadResponse = {isTar: boolean; iv: string; checksum: string};
 type BaseDownloadMessageValue = {userId: string; archiveName: string};
-type DownloadStartMessage = {key: 'start'; value: BaseDownloadMessageValue & {checksum: string; iv: string}};
+type DownloadStartMessage = {key: 'start'; value: BaseDownloadMessageValue};
 type DownloadDataMessage = {key: 'data'; value: BaseDownloadMessageValue & {data: string}};
 type DownloadFinishMessage = {key: 'finish'; value: BaseDownloadMessageValue};
 
 export type Archive = {
   userId: string;
   name: string;
-  checksum?: string;
-  iv?: string;
+  isTar: boolean;
+  iv: string;
+  checksum: string;
   sizeInBytes: number;
   createdAt: Date;
 };
@@ -56,9 +56,12 @@ export class StorageService {
     this._kafkaProducer = this._kafkaClient.producer(producerConfig);
   }
 
-  async upload(readableStream: stream.Readable, options: UploadOptions) {
+  async upload(
+    readableStream: stream.Readable,
+    options: {archiveName: string; isTar: boolean; encryptionKey?: string}
+  ) {
     const userId = this._userId;
-    const {archiveName, encryptionKey = crypto.randomBytes(16).toString('hex')} = options;
+    const {archiveName, isTar, encryptionKey = crypto.randomBytes(16).toString('hex')} = options;
 
     await this._ensureKafkaProducerReady();
     await this._ensureKafkaConsumerReady();
@@ -99,7 +102,7 @@ export class StorageService {
           const checksum = hash.digest('hex');
           await this._kafkaProducer.send({
             topic: UPLOAD_STREAM_TOPIC,
-            messages: [{key: 'finish', value: JSON.stringify({userId, archiveName, iv, checksum})}]
+            messages: [{key: 'finish', value: JSON.stringify({userId, archiveName, isTar, iv, checksum})}]
           });
           resolve();
         })
@@ -114,61 +117,69 @@ export class StorageService {
 
     await this._waitForAcknowledge('finish');
 
-    return encryptionKey;
+    return {encryptionKey};
   }
 
-  async download(writeableStream: stream.Writable, {archiveName, encryptionKey}: DownloadOptions) {
+  async download(archiveName: string, encryptionKey: string) {
     const userId = this._userId;
-    await this._httpClient.request({method: 'POST', path: `/archives/download/${userId}/${archiveName}`});
+    const response = await this._httpClient.request({
+      method: 'POST',
+      path: `/archives/download/${userId}/${archiveName}`
+    });
+    const {isTar, iv, checksum} = (await response.body.json()) as InitiateDownloadResponse;
 
     await this._ensureKafkaConsumerReady();
 
+    let isStartMessageReceived = false;
     const hash = crypto.createHash('md5');
-    let metadata: {checksum: string; iv: string};
-    await this._kafkaConsumer.run({
-      eachMessage: async (payload) => {
-        if (payload.topic !== DOWNLOAD_TOPIC) {
-          return;
-        }
 
-        const message = {
-          key: payload.message.key!.toString(),
-          value: payload.message.value!.toString()
-        } as unknown as DownloadStartMessage | DownloadDataMessage | DownloadFinishMessage;
+    return {
+      isTar,
+      downloadFn: async (writeableStream: stream.Writable) =>
+        new Promise<void>((resolve, reject) =>
+          this._kafkaConsumer.run({
+            eachMessage: async (payload) => {
+              if (payload.topic !== DOWNLOAD_TOPIC) {
+                return;
+              }
 
-        if (userId !== message.value.userId || archiveName !== message.value.archiveName) {
-          return;
-        }
+              const message = {
+                key: payload.message.key!.toString(),
+                value: payload.message.value!.toString()
+              } as unknown as DownloadStartMessage | DownloadDataMessage | DownloadFinishMessage;
 
-        if (message.key === 'start') {
-          metadata = {checksum: message.value.checksum, iv: message.value.iv};
-          return;
-        }
+              if (userId !== message.value.userId || archiveName !== message.value.archiveName) {
+                return;
+              }
 
-        if (!metadata) {
-          writeableStream.emit('error', `"${message.key}" message was received before "start" message`);
-          return;
-        }
+              if (message.key === 'start') {
+                isStartMessageReceived = true;
+                return;
+              }
 
-        if (message.key === 'data') {
-          const decipher = crypto.createDecipheriv('aes-256-cbc', encryptionKey, metadata.iv);
-          const decrypted = decipher.update(Buffer.from(message.value.data, 'base64'));
-          const uncompressed = await promisify(zlib.gunzip)(decrypted);
-          hash.update(uncompressed);
-          writeableStream.write(uncompressed, 'base64');
-        } else if (message.key === 'finish') {
-          if (hash.digest('hex') !== metadata.checksum) {
-            writeableStream.emit('error', 'Checksum verification failed');
-            return;
-          }
-        }
-      }
-    });
+              if (!isStartMessageReceived) {
+                writeableStream.emit('error', `"${message.key}" message was received before "start" message`);
+                return;
+              }
+
+              if (message.key === 'data') {
+                const decipher = crypto.createDecipheriv('aes-256-cbc', encryptionKey, iv);
+                const decrypted = decipher.update(Buffer.from(message.value.data, 'base64'));
+                const uncompressed = await promisify(zlib.gunzip)(decrypted);
+                hash.update(uncompressed);
+                writeableStream.write(uncompressed, 'base64');
+              } else if (message.key === 'finish') {
+                hash.digest('hex') === checksum ? resolve() : reject(new Error('Checksum verification failed'));
+              }
+            }
+          })
+        )
+    };
   }
 
   async list() {
     const response = await this._httpClient.request({method: 'GET', path: `/archives`});
-    return response.body.json();
+    return response.body.json() as Promise<Archive[]>;
   }
 
   async delete(archiveName: string) {

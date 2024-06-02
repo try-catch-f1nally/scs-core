@@ -1,33 +1,54 @@
 {
-  "name": "@try-catch-f1nally/core",
+  "name": "@try-catch-f1nally/scs-core",
   "version": "1.0.0",
-  "description": "Secure Cloud Storage core",
+  "description": "Secure Cloud Storage Core package",
   "keywords": [],
-  "main": "index.js",
+  "homepage": "https://github.com/try-catch-f1nally/scs-core#readme",
+  "bugs": {
+    "url": "https://github.com/try-catch-f1nally/scs-core/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/try-catch-f1nally/scs-core"
+  },
+  "license": "MIT",
+  "author": "Mykyta Kulbanevych",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "default": "./lib/esm/index.mjs"
+      },
+      "require": {
+        "default": "./lib/cjs/index.js"
+      }
+    }
+  },
   "type": "module",
+  "main": "./lib/cjs/index.js",
+  "types": "./lib/types/index.d.ts",
+  "files": [
+    "lib/**/*"
+  ],
   "engines": {
     "node": "18"
   },
   "scripts": {
     "test": "echo \"No test command specified\"",
-    "start": "node --experimental-specifier-resolution=node ./dist/index.js",
-    "build": "rm -rf ./dist && tsc",
+    "clean": "rm -rf ./lib",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:types",
+    "build:esm": "tsc --module esnext --outDir lib/esm && mv ./lib/esm/index.js ./lib/esm/index.mjs",
+    "build:cjs": "tsc --module commonjs --outDir ./lib/cjs",
+    "build:types": "tsc --declaration --outDir ./lib/types --emitDeclarationOnly",
+    "prepack": "npm run build",
     "lint": "eslint --ignore-path .gitignore ./src/**/*.ts",
     "lint:fix": "eslint --ignore-path .gitignore --fix ./src/**/*.ts",
     "format": "prettier --ignore-path .gitignore --ignore-unknown --check . && ec",
     "format:fix": "prettier --ignore-path .gitignore --ignore-unknown --write . && ec",
     "lintformatfix": "npm run lint:fix && npm run format:fix"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/try-catch-f1nally/scs-core"
-  },
-  "author": "Mykyta Kulbanevych",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/try-catch-f1nally/scs-core/issues"
-  },
-  "homepage": "https://github.com/try-catch-f1nally/scs-core#readme",
   "devDependencies": {
     "@types/node": "~20.12.11",
     "@typescript-eslint/eslint-plugin": "~7.8.0",

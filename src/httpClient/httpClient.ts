@@ -1,7 +1,7 @@
 import * as undici from 'undici';
 import {CONFIG} from '../config/config';
 
-const refreshEndpoint = CONFIG.apiUrl + '/refresh';
+const REFRESH_ENDPOINT = CONFIG.apiUrl + '/refresh';
 
 export type AuthTokens = {accessToken: string; refreshToken: string};
 type RefreshEndpointResponse = AuthTokens;
@@ -32,8 +32,7 @@ export class HttpClient extends undici.Client {
 
       response = await super.request(getOptionsWithAuthHeader(options));
       if (response.statusCode === 401) {
-        const refreshTokenResponse = await undici.request(refreshEndpoint, {
-          // headers: {'Content-Type': 'application/json'},
+        const refreshTokenResponse = await undici.request(REFRESH_ENDPOINT, {
           body: JSON.stringify({refreshToken})
         });
         if (refreshTokenResponse.statusCode > 299) {
