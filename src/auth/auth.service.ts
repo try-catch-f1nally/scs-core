@@ -34,4 +34,20 @@ export class AuthService {
       body: JSON.stringify({refreshToken})
     });
   }
+
+  changeLogin(login: string) {
+    return this._httpClient.request({
+      method: 'PATCH',
+      path: '/users/:id/login',
+      body: JSON.stringify({login})
+    });
+  }
+
+  changePassword(password: string) {
+    return this._httpClient.request({
+      method: 'PATCH',
+      path: '/users/:id/password',
+      body: JSON.stringify({password})
+    });
+  }
 }
