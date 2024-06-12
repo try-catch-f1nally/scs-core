@@ -43,11 +43,11 @@ export class AuthService {
     });
   }
 
-  changePassword(password: string) {
+  changePassword(oldPassword: string, newPassword: string) {
     return this._httpClient.request({
       method: 'PATCH',
       path: '/users/:id/password',
-      body: JSON.stringify({password})
+      body: JSON.stringify({oldPassword, newPassword})
     });
   }
 }
