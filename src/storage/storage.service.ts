@@ -124,7 +124,8 @@ export class StorageService {
     const userId = this._userId;
     const response = await this._httpClient.request({
       method: 'POST',
-      path: `/archives/download/${userId}/${archiveName}`
+      path: `/archives/download/${userId}/${archiveName}`,
+      includeAuthToken: true
     });
     const {isTar, iv, checksum} = (await response.body.json()) as InitiateDownloadResponse;
 
@@ -178,12 +179,20 @@ export class StorageService {
   }
 
   async list() {
-    const response = await this._httpClient.request({method: 'GET', path: `/archives`});
+    const response = await this._httpClient.request({
+      method: 'GET',
+      path: `/archives`,
+      includeAuthToken: true
+    });
     return response.body.json() as Promise<Archive[]>;
   }
 
   async delete(archiveName: string) {
-    await this._httpClient.request({method: 'DELETE', path: `/archives/${this._userId}/${archiveName}`});
+    await this._httpClient.request({
+      method: 'DELETE',
+      path: `/archives/${this._userId}/${archiveName}`,
+      includeAuthToken: true
+    });
   }
 
   private async _ensureKafkaProducerReady() {

@@ -39,7 +39,8 @@ export class AuthService {
     return this._httpClient.request({
       method: 'PATCH',
       path: '/users/:id/login',
-      body: JSON.stringify({login})
+      body: JSON.stringify({login}),
+      includeAuthToken: true
     });
   }
 
@@ -47,7 +48,8 @@ export class AuthService {
     return this._httpClient.request({
       method: 'PATCH',
       path: '/users/:id/password',
-      body: JSON.stringify({oldPassword, newPassword})
+      body: JSON.stringify({oldPassword, newPassword}),
+      includeAuthToken: true
     });
   }
 }
